@@ -21,7 +21,7 @@ Seguiremos una estrategia de desarrollo incremental. No pasaremos al siguiente h
 
 
 3. **Hito 3: Orquestación Secuencial y Controlada**
-* *Objetivo:* Procesar los 30 candidatos uno por uno, manejando excepciones (si un PDF falla, el proceso continúa con el siguiente) y ordenando los resultados finales por puntuación.
+* *Objetivo:* Procesar todos los candidatos uno por uno, manejando excepciones (si un PDF falla, el proceso continúa con el siguiente) y ordenando los resultados finales por puntuación.
 
 
 4. **Hito 4: Integración MCP y Publicación**
@@ -90,7 +90,7 @@ Este es el camino exacto que seguirá el algoritmo de `main.py` al ejecutarse:
 3. Listar todos los PDFs en la carpeta /candidatos
    │
    ▼
-4. [Bucle para cada candidato (1 al 30)]
+4. [Bucle para cada candidato (1..N)]
    ├── Extraer texto del PDF actual
    ├── Enviar al Agente (texto_candidato + textos_vacantes)
    ├── Capturar respuesta estructurada en JSON (Pydantic)
@@ -119,6 +119,6 @@ Este es el camino exacto que seguirá el algoritmo de `main.py` al ejecutarse:
 
 * **No uses Expresiones Regulares complejas para "parsear" los PDFs:** Deja que el extractor de PDF saque el texto plano de forma limpia y transparente, y que el LLM se encargue de interpretar la información semántica. Esto evita que el código falle ante variaciones de diseño en las hojas de vida.
 * **Aislamiento de Prompts:** Los prompts del Agente deben vivir exclusivamente dentro de `agent.py`. `main.py` no debe saber qué modelo estás usando ni cómo le hablas a la IA.
-* **Loggear el progreso:** Como procesar 30 PDFs con un LLM tomará un par de minutos, pon `print()` informativos (ej. `[INFO] Procesando candidato 12/30: Juan_Perez.pdf...`). Esto demuestra madurez de software en una prueba técnica.
+* **Loggear el progreso:** Como procesar muchos PDFs con un LLM tomará un par de minutos, pon `print()` informativos (ej. `[INFO] Procesando candidato 12/total: Juan_Perez.pdf...`). Esto demuestra madurez de software en una prueba técnica.
 
 Si estás de acuerdo con esta arquitectura y orden, empecemos a escribir el código del **Hito 1: `pdf_utils.py**` y a dejar lista la extracción limpia de los textos.

@@ -25,8 +25,13 @@ class MCPNotionClient:
         self.notion_key = os.getenv("NOTION_API_KEY") or os.getenv("NOTION_TOKEN")
         self.page_id = os.getenv("NOTION_PAGE_ID")
 
-    async def publicar_reporte(self, id_pagina_notion: str, evaluaciones: List[Any]):
-        """Publica el reporte de evaluaciones ordenadas en Notion usando el servidor MCP oficial vía stdio."""
+    async def publicar_reporte(self, id_pagina_notion: str, evaluaciones: Any):
+        """Publica el reporte de evaluaciones en Notion usando el servidor MCP oficial vía stdio.
+
+        `evaluaciones` puede ser:
+        - una lista de evaluaciones (comportamiento legacy), o
+        - un diccionario mapeando `job_name` -> lista de evaluaciones para ese puesto.
+        """
         if not self.notion_key:
             raise ValueError("[ERROR] No se configuró NOTION_API_KEY ni NOTION_TOKEN en el archivo .env")
 
@@ -77,40 +82,80 @@ class MCPNotionClient:
                     }
                 })
 
-                # Insertar cada candidato evaluado en orden de prioridad
-                for idx, ev in enumerate(evaluaciones, 1):
-                    # Extraer campos de datos (soporta diccionario o Pydantic)
-                    if hasattr(ev, "model_dump"):
-                        data = ev.model_dump()
-                    elif isinstance(ev, dict):
-                        data = ev
-                    else:
-                        data = {}
+                # Insertar evaluaciones. Soportamos agrupamiento por puesto.
+                if isinstance(evaluaciones, dict):
+                    # Para cada puesto, crear encabezado y listar candidatos ordenados por prioridad
+                    for job_name, evs in evaluaciones.items():
+                        # Encabezado del puesto
+                        children.append({
+                            "type": "heading_2",
+                            "heading_2": {"rich_text": [{"type": "text", "text": {"content": f"📌 {job_name} - Candidatos recomendados"}}]}
+                        })
 
-                    nombre = data.get("nombre_candidato", getattr(ev, "nombre_candidato", "Desconocido"))
-                    encaja = data.get("encaja_en", getattr(ev, "encaja_en", "Ninguno"))
-                    prioridad = data.get("puntuacion_prioridad", getattr(ev, "puntuacion_prioridad", 0))
-                    justificacion = data.get("justificacion", getattr(ev, "justificacion", ""))
-                    archivo = getattr(ev, "archivo", data.get("archivo", "Desconocido"))
+                        # Ordenar por prioridad desc
+                        try:
+                            evs_sorted = sorted(evs, key=lambda x: (getattr(x, 'puntuacion_prioridad', 0) if not isinstance(x, dict) else x.get('puntuacion_prioridad', 0)), reverse=True)
+                        except Exception:
+                            evs_sorted = evs
 
-                    texto_evaluacion = (
-                        f"Rank #{idx} | {nombre} ({archivo})\n"
-                        f"• Ajuste: {encaja}\n"
-                        f"• Prioridad de Ajuste: {prioridad}/10\n"
-                        f"• Análisis Técnico: {justificacion}"
-                    )
+                        for idx, ev in enumerate(evs_sorted, 1):
+                            if hasattr(ev, "model_dump"):
+                                data = ev.model_dump()
+                            elif isinstance(ev, dict):
+                                data = ev
+                            else:
+                                data = {}
 
-                    children.append({
-                        "type": "paragraph",
-                        "paragraph": {
-                            "rich_text": [
-                                {
-                                    "type": "text",
-                                    "text": {"content": texto_evaluacion}
-                                }
-                            ]
-                        }
-                    })
+                            nombre = data.get("nombre_candidato", getattr(ev, "nombre_candidato", "Desconocido"))
+                            prioridad = data.get("puntuacion_prioridad", getattr(ev, "puntuacion_prioridad", 0))
+                            justificacion = data.get("justificacion", getattr(ev, "justificacion", ""))
+                            archivo = getattr(ev, "archivo", data.get("archivo", "Desconocido"))
+
+                            texto_evaluacion = (
+                                f"Rank #{idx} | {nombre} ({archivo})\n"
+                                f"• Prioridad: {prioridad}/10\n"
+                                f"• Análisis: {justificacion}"
+                            )
+
+                            children.append({
+                                "type": "paragraph",
+                                "paragraph": {"rich_text": [{"type": "text", "text": {"content": texto_evaluacion}}]}
+                            })
+                else:
+                    # Comportamiento legacy: lista plana de evaluaciones
+                    for idx, ev in enumerate(evaluaciones, 1):
+                        # Extraer campos de datos (soporta diccionario o Pydantic)
+                        if hasattr(ev, "model_dump"):
+                            data = ev.model_dump()
+                        elif isinstance(ev, dict):
+                            data = ev
+                        else:
+                            data = {}
+
+                        nombre = data.get("nombre_candidato", getattr(ev, "nombre_candidato", "Desconocido"))
+                        encaja = data.get("encaja_en", getattr(ev, "encaja_en", "Ninguno"))
+                        prioridad = data.get("puntuacion_prioridad", getattr(ev, "puntuacion_prioridad", 0))
+                        justificacion = data.get("justificacion", getattr(ev, "justificacion", ""))
+                        archivo = getattr(ev, "archivo", data.get("archivo", "Desconocido"))
+
+                        texto_evaluacion = (
+                            f"Rank #{idx} | {nombre} ({archivo})\n"
+                            f"• Ajuste: {encaja}\n"
+                            f"• Prioridad de Ajuste: {prioridad}/10\n"
+                            f"• Análisis Técnico: {justificacion}"
+                        )
+
+                        children.append({
+                            "type": "paragraph",
+                            "paragraph": {
+                                "rich_text": [
+                                    {
+                                        "type": "text",
+                                        "text": {"content": texto_evaluacion}
+                                    }
+                                ]
+                            }
+                        })
 
                 print(f"[INFO] Enviando reporte ordenado de {len(evaluaciones)} candidatos a la página Notion {formatted_page_id}...")
                 
